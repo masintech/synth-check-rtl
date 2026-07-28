@@ -277,7 +277,16 @@ def test_detect_reproduces_sv_testbench_isms_manifest():
     assert sorted(_key(f) for f in actual) == sorted(_key(f) for f in manifest)
 
 
+def test_detect_produces_count_summary():
+    """Detect emits a one-line summary of error/warning/note counts."""
+    actual = detect(FIXTURES / "timing_sim_only.sv")
+    summary = count_summary(actual)
+    assert summary == "5 findings: 5 errors, 0 warnings, 0 notes"
+
+
 def test_detect_reproduces_synth_correctness_manifest():
+    """The synth_correctness fixture's pattern-level manifest is empty — its
+    inferred-latch and blocking-in-clocked cases are semantic (reasoning pass)."""
     manifest = parse_manifest(FIXTURES / "synth_correctness.expected.md")
     actual = detect(FIXTURES / "synth_correctness.sv")
     assert sorted(_key(f) for f in actual) == sorted(_key(f) for f in manifest)
@@ -338,13 +347,6 @@ def test_finding_shape_matches_manifest_and_skill():
     # SKILL.md's Finding fields must match this shape (no stray 'ref'-only claim).
     skill = (SKILL / "SKILL.md").read_text()
     assert "category" in skill
-
-
-def test_detect_produces_count_summary():
-    """Detect emits a one-line summary of error/warning/note counts."""
-    actual = detect(FIXTURES / "timing_sim_only.sv")
-    summary = count_summary(actual)
-    assert summary == "5 findings: 5 errors, 0 warnings, 0 notes"
 
 
 def test_detect_skips_testbench_files():

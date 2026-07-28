@@ -49,7 +49,7 @@ Loaded on demand (per Finding), never bulk-loaded during Detect.
 
 | Construct                              | Severity | Why                                                  | Emulator-config option | Synthesizable rewrite                                                |
 |----------------------------------------|----------|------------------------------------------------------|------------------------|----------------------------------------------------------------------|
-| inferred latch (incomplete `if/else`)  | warning  | Missing branch holds value -> latch.                  | Emulators latch-prone; some warn. | Add the `else` branch to assign every output. <!-- name:inferred latch | pattern:always\s*@\s*\(\s*\*\s*\) -->
+| inferred latch (incomplete `if/else`)  | warning  | Missing branch holds value -> latch.                  | Emulators latch-prone; some warn. | Add the `else` branch to assign every output. <!-- name:inferred latch | semantic:incomplete-if-else -->
 | inferred latch (missing `case`/`default`) | warning | Uncovered case holds value -> latch.               | As above.              | Add `default` assigning every output. <!-- semantic:case-no-default -->
 | multi-driver net                       | warning  | Two drivers on one net -> X / contention.            | Some flows flag it.   | Drive each net from exactly one `always` block. <!-- semantic:multi-driver -->
 | blocking (`=`) in clocked block        | warning  | Blocking in sequential logic -> race / wrong order.  | As above.              | Use nonblocking (`<=`) in clocked `always_ff`. <!-- semantic:blocking-in-clocked -->

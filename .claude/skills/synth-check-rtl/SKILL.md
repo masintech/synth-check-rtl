@@ -37,12 +37,15 @@ two passes over the construct reference, reached by the context pointer below:
 
 - **Pattern pass** — for each construct whose row carries a `pattern:` comment,
   test every remaining line against that pattern. Every match is one **Finding**.
-- **Reasoning pass** — for constructs whose row carries no pattern (semantic
-  ones: CDC, logic on reset/clock, multi-edge sensitivity, inferred latch, mixed
-  logic), reason against `SYNTH-RULES.md` to decide whether the code is a real
-  instance. A valid async reset (`posedge clk or negedge rst`) is not flagged; a
-  dual-clock hazard (`posedge a or posedge b`) is. This pass is model-dependent —
-  treat accuracy as probabilistic, not guaranteed.
+- **Reasoning pass** — for constructs whose row carries a `semantic:` comment
+  (CDC, logic on reset/clock, multi-edge sensitivity, inferred latch, mixed
+  logic, multi-driver, blocking-in-clocked, generate misuse, port-width), reason
+  against `SYNTH-RULES.md` to decide whether the code is a real instance. A valid
+  async reset (`posedge clk or negedge rst`) is not flagged; a dual-clock hazard
+  (`posedge a or posedge b`) is. This pass is model-dependent — treat accuracy
+  as probabilistic, not guaranteed. There is no deterministic test that can
+  prove semantic detection correct (it would be tautological); verify it against
+  the semantic fixture's expected-Findings manifest by reading, not by mirroring.
 
 Every Finding carries `file:line | construct | severity | category`.
 
