@@ -82,6 +82,11 @@ confirmation, and only the confirmed item is rewritten.
   of truth. Each construct co-locates its severity, why, emulator-config option,
   and synthesizable rewrite in one row. Loaded on demand, never bulk. Change a
   verdict or rewrite here and Detect/Fix follow.
+- **Synthesizable-RTL rules & canonical forms:** [`SYNTH-RULES.md`](SYNTH-RULES.md)
+  — the three unforgivable rules (no logic on reset/clock, no latches, separate
+  sequential/combinational) with good/bad examples. Consult when classifying a
+  synthesis-correctness Finding (valid async reset vs logic-on-reset, a latch, a
+  CDC) and when writing a Fix rewrite — the canonical code lives there.
 - **Allowlist:** `docs/agents/emulation-allowlist.md` (optional). A Finding
   against an allowlisted construct downgrades to `note`. Absent it, the generic
   IEEE 1800 synthesizable subset governs.

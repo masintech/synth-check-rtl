@@ -29,6 +29,9 @@ Loaded on demand (per Finding), never bulk-loaded during Detect.
 | `disable`   | error    | Procedural process kill; no hardware.               | Unsupported.                                    | Replace with a state-machine exit condition / enable deassert.                     |
 | `deassign`  | error    | Procedural override removal; not hardware.          | Unsupported.                                    | Remove; assign through a single driver with a mux.                                 |
 | `real`/`time` type | error | Non-synthesizable types.                       | Unsupported.                                    | Use fixed-point integer arithmetic.                                                |
+| `$random`/`$urandom`/`$urandom_range` | error | System random functions; no hardware. | Unsupported. | Drive inputs from a synthesizable LFSR or a fixed/seeded vector. |
+| `$display` and other system tasks (`$monitor`, `$fwrite`, `$finish`, ...) | error | System task; no hardware. | Emulators often elide system tasks if the flow strips them. | Remove from RTL; emit state via a synthesizable debug port. |
+| `#delay` on continuous `assign` (`assign a = #2 b;`) | error | Delay on a continuous assignment; no hardware. | Unsupported. | Remove the delay; insert a register (clocked `always_ff`) for the desired latency. |
 
 ## 2. SV testbench-isms
 
@@ -51,6 +54,11 @@ Loaded on demand (per Finding), never bulk-loaded during Detect.
 | inferred latch (missing `case`/`default`) | warning | Uncovered case holds value -> latch.               | As above.              | Add `default` assigning every output.                                |
 | multi-driver net                       | warning  | Two drivers on one net -> X / contention.            | Some flows flag it.   | Drive each net from exactly one `always` block.                      |
 | blocking (`=`) in clocked block        | warning  | Blocking in sequential logic -> race / wrong order.  | As above.              | Use nonblocking (`<=`) in clocked `always_ff`.                       |
+| logic on reset (non-constant RHS)     | warning  | Non-constant sampled on reset -> MUX/logic on reset net; glitch risk. | Some flows accept it. | Reset to a constant only; sample inputs in the combinational block (see SYNTH-RULES Rule 1). |
+| logic on clock                         | warning  | Combinational logic on the clock net -> glitch risk.  | Some flows accept it.  | Clock the register on a clean clock edge; move logic to a separate combinational block. |
+| clock-domain crossing (CDC)            | warning  | Signal from one async clock domain used in another without a synchroniser -> metastability. | Some flows flag CDC. | Insert a synchroniser (dual-flop) at the crossing (see SYNTH-RULES Rule 1). |
+| mixed logic in sequential block        | warning  | Combinational cloud inside a sequential block -> breaks direct FF mapping. | Some flows accept it. | Move combinational logic to an `always @*` block; keep the sequential block a clean register (see SYNTH-RULES Rule 3). |
+| multi-edge sensitivity (`posedge a or posedge b`) | warning | Two edge sources -> ambiguous FF control; usually a dual-clock hazard. | Rarely supported. | One clock + one async reset only. If two clocks, that's a CDC — use a synchroniser (see SYNTH-RULES Rule 1). |
 
 ## 4. Structural / port
 
@@ -66,3 +74,7 @@ Loaded on demand (per Finding), never bulk-loaded during Detect.
   override: a listed construct's Finding downgrades to `note`.
 - This is the generic IEEE 1800 synthesizable subset. Vendor-specific accepted
   constructs go in the allowlist, not here.
+- Synthesis-correctness rows (logic on reset/clock, CDC, mixed logic,
+  multi-edge sensitivity) need semantic judgment — a `posedge clk or negedge
+  rst` is a valid async reset, while `posedge a or posedge b` is a dual-clock
+  hazard. Classify against [`SYNTH-RULES.md`](SYNTH-RULES.md), not by pattern.
