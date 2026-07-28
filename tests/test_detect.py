@@ -207,6 +207,38 @@ def test_detect_defaults_to_rtl_dir(tmp_path, monkeypatch):
     assert all(f["file"] != "b_tb.sv" for f in actual)
 
 
+# --------------------------------------------------------------------------- #
+# Allowlist tests (ticket 04).
+# --------------------------------------------------------------------------- #
+
+def test_allowlist_downgrades_to_note():
+    """A construct in the allowlist is reported at note severity."""
+    findings = detect(FIXTURES / "timing_sim_only.sv")
+    with_allow = apply_allowlist(findings, allowlist={"#delay"})
+    delays = [f for f in with_allow if f["construct"] == "#delay"]
+    assert delays and all(f["severity"] == "note" for f in delays)
+
+
+def test_without_allowlist_construct_is_at_base_severity():
+    """Without the allowlist, the same construct is at its base severity."""
+    findings = detect(FIXTURES / "timing_sim_only.sv")
+    without = apply_allowlist(findings, allowlist=set())
+    delays = [f for f in without if f["construct"] == "#delay"]
+    assert delays and all(f["severity"] == "error" for f in delays)
+
+
+def test_absent_allowlist_governs_generically():
+    """An absent allowlist file yields an empty set (generic subset governs)."""
+    al = parse_allowlist(FIXTURES / "does_not_exist.md")
+    assert al == set()
+
+
+def test_seed_allowlist_parses_to_empty():
+    """The shipped seed allowlist has no accepted constructs."""
+    repo_allowlist = FIXTURES.parent / "docs" / "agents" / "emulation-allowlist.md"
+    assert parse_allowlist(repo_allowlist) == set()
+
+
 def count_summary(findings: list[dict]) -> str:
     errs = sum(1 for f in findings if f["severity"] == "error")
     warns = sum(1 for f in findings if f["severity"] == "warning")
@@ -216,3 +248,49 @@ def count_summary(findings: list[dict]) -> str:
 
 def _key(f: dict):
     return (f["file"], f["line"], f["construct"], f["severity"], f["category"])
+
+
+# --------------------------------------------------------------------------- #
+# Allowlist — per-project downgrade to note.
+# --------------------------------------------------------------------------- #
+
+_ALLOWLIST_ENTRY = re.compile(r"^\s*-\s*`?([^`]+?)`?\s*$")
+
+
+def parse_allowlist(path: Path) -> set[str]:
+    """Parse the allowlist's accepted-construct list.
+
+    Reads only the bulleted entries under 'Accepted constructs'. An absent file
+    or an empty list yields an empty set — the generic subset then governs.
+    """
+    if not path.exists():
+        return set()
+    text = path.read_text()
+    # Collect lines under the 'Accepted constructs' heading, before '## Notes'.
+    lines = text.splitlines()
+    accepted: list[str] = []
+    in_section = False
+    for line in lines:
+        if line.strip().startswith("## Accepted"):
+            in_section = True
+            continue
+        if line.strip().startswith("## "):  # next heading ends the section
+            in_section = False
+            continue
+        if not in_section:
+            continue
+        m = _ALLOWLIST_ENTRY.match(line)
+        if m and m.group(1).strip().lower() not in {"(none)"}:
+            accepted.append(m.group(1).strip())
+    return set(accepted)
+
+
+def apply_allowlist(findings: list[dict], allowlist: set[str]) -> list[dict]:
+    """Downgrade a Finding against an allowlisted construct to 'note'."""
+    out: list[dict] = []
+    for f in findings:
+        if f["construct"] in allowlist:
+            out.append({**f, "severity": "note"})
+        else:
+            out.append(f)
+    return out
