@@ -1,20 +1,19 @@
 """
-Acceptance test for the synth-check-rtl skill — Detect tracer bullet (ticket 01).
+Acceptance test for the synth-check-rtl skill — Detect (tickets 01, 02, 07).
 
 This is the one pre-agreed test seam: run the skill on a fixture and assert it
 reproduces that fixture's expected-Findings manifest.
 
-The skill is an agent skill, so its Detect logic is exercised through a small,
-stable detection routine the skill itself documents. To keep this test honest and
-avoid a tautology, the expected Findings come from the fixture's manifest
-(an independent source of truth, hand-authored from the spec), NOT recomputed
-by mirroring the detector's code.
+The detection logic the skill describes is exercised through `detect` below.
+To keep this test honest and avoid a tautology, the expected Findings come from
+each fixture's manifest (an independent, hand-authored source of truth), NOT
+recomputed by mirroring the detector's code.
 
-How the skill is reached:
-  - The detector's construct list lives in fixtures/../../CONSTRUCTS-like reference
-    but for ticket 01 the construct set is small and the detection routine is
-    minimal. This test drives the detection routine over the fixture text and
-    checks the Findings against the manifest.
+Ticket 07: detection is driven by CONSTRUCTS.md (the single source of truth).
+There is no separate hardcoded construct list — adding a construct with its
+pattern to CONSTRUCTS.md extends detection. The allowlist is applied within
+detection, and the Finding shape (file, line, construct, severity, category)
+matches the manifests and SKILL.md.
 """
 from __future__ import annotations
 
@@ -24,39 +23,126 @@ from pathlib import Path
 import pytest
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
-
+SKILL = Path(__file__).resolve().parent.parent / ".claude" / "skills" / "synth-check-rtl"
 
 # --------------------------------------------------------------------------- #
-# Minimal Detect routine for the tracer-bullet subset (timing & sim-only).
-# This is the detection logic the skill describes for ticket 01; it is the
-# thing under test. Keeping it tiny and explicit is the point of the slice.
+# CONSTRUCTS.md parser — the single source of truth. Detection reads this.
 # --------------------------------------------------------------------------- #
 
-# Tracer-bullet construct subset: timing & sim-only.
-# Each entry: (regex, construct name, severity, category)
-_TRACER_CONSTRUCTS = [
-    (re.compile(r"#\d+"),                             "#delay",                   "error",   "timing & sim-only"),
-    (re.compile(r"\$display\b"),                      "$display",                 "error",   "timing & sim-only"),
-    (re.compile(r"\bwait\s*\("),                      "wait",                     "error",   "timing & sim-only"),
-    (re.compile(r"\bforever\b"),                       "forever",                  "error",   "timing & sim-only"),
-    (re.compile(r"\binitial\b"),                       "initial",                  "error",   "timing & sim-only"),
-    # SV testbench-isms
-    (re.compile(r"\w+\s*\[\s*\]"),                     "dynamic array",            "error",   "SV testbench-isms"),
-    (re.compile(r"\w+\s*\[[a-zA-Z_]\w*\]"),            "associative array",        "error",   "SV testbench-isms"),
-    (re.compile(r"\[\s*\$"),                            "queue",                    "error",   "SV testbench-isms"),
-    (re.compile(r"\bclass\b"),                          "class",                    "error",   "SV testbench-isms"),
-    # synthesis-correctness
-    (re.compile(r"always\s*@\s*\(\s*\*\s*\)"),          "inferred latch",           "warning", "synthesis-correctness"),
-    # structural / port
-    (re.compile(r"parameter\s+real\b"),                 "real parameter",           "error",   "structural/port"),
-]
+# A construct row optionally carries a detection spec in a trailing HTML
+# comment on the row, of the form:  <!-- name:NAME | pattern:REGEX -->
+# - `name`     — the canonical Finding construct name (the short, clean token
+#                shown to the user; falls back to the stripped cell if absent).
+# - `pattern`  — a regex; rows with a pattern are detected deterministically.
+# Rows whose comment carries `semantic:TAG` instead are model-dependent (ticket
+# 08) and are skipped by the deterministic detector.
+_COMMENT = re.compile(r"<!--\s*(.*?)\s*-->", re.DOTALL)
 
-# Stable registry: construct name -> (severity, category), for the detectable
-# subset. (CONSTRUCTS.md is the full source of truth; this maps the constructs
-# the detector can currently flag by pattern.)
-CONSTRUCT_REGISTRY: dict[str, tuple[str, str]] = {
-    name: (severity, category) for _r, name, severity, category in _TRACER_CONSTRUCTS
-}
+
+def _parse_comment(comment: str | None) -> dict:
+    """Extract name / pattern / semantic fields from a row's HTML comment.
+
+    Fields are separated by ' | ', not bare '|' — regex patterns legitimately
+    contain '|' (alternation), so splitting on every pipe would corrupt them.
+    """
+    out: dict = {"name": None, "pattern": None, "semantic": None}
+    if not comment:
+        return out
+    for field in re.split(r"\s+\|\s+", comment):
+        if field.startswith("name:"):
+            out["name"] = field[len("name:"):].strip()
+        elif field.startswith("pattern:"):
+            out["pattern"] = field[len("pattern:"):].strip()
+        elif field.startswith("semantic:"):
+            out["semantic"] = field[len("semantic:"):].strip()
+    return out
+
+
+def _category_key(cat: str) -> str:
+    """Normalize a category label so CONSTRUCTS.md headings and the manifests
+    join on the same key (case + whitespace + slash vs hyphen)."""
+    return re.sub(r"[\s/-]+", "", cat).lower()
+
+
+def _cell_short_name(raw: str) -> str:
+    """Fallback construct name from the cell: strip backticks, take the leading
+    token up to '(' or '/'. Prefer the explicit `name:` field when present."""
+    name = raw.strip().strip("`")
+    name = re.split(r"[/(]", name)[0]
+    return name.strip()
+
+
+def construct_rows() -> list[dict]:
+    """Parse CONSTRUCTS.md into one dict per construct row, on demand.
+
+    Each dict: {construct, severity, category, why, emulator_config, rewrite,
+    pattern, semantic}. `construct` is the canonical Finding name (from `name:`
+    if given, else the stripped cell). `pattern` is None for semantic constructs.
+    """
+    text = (SKILL / "CONSTRUCTS.md").read_text()
+    rows: list[dict] = []
+    current_category = ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            m = re.match(r"## \d+\.\s*(.*)", stripped)
+            current_category = m.group(1).strip() if m else ""
+            continue
+        if not stripped.startswith("|") or set(stripped.replace("|", "")) <= {"-"}:
+            continue
+        # Split on the first 5 pipes only — the rewrite cell can legitimately
+        # contain '|' (e.g. inside a code snippet), so don't over-split.
+        cells = _split_row(stripped)
+        if len(cells) < 5 or cells[0].lower() in {"construct"}:
+            continue
+        construct_cell, severity, why, emu, rewrite = cells[0], cells[1], cells[2], cells[3], cells[4]
+        meta = _parse_comment(_COMMENT.search(line).group(1) if _COMMENT.search(line) else None)
+        rows.append({
+            "construct": meta["name"] or _cell_short_name(construct_cell),
+            "severity": severity,
+            "category": current_category,
+            "why": why,
+            "emulator_config": emu,
+            "rewrite": re.sub(r"<!--.*?-->\s*$", "", rewrite, flags=re.DOTALL).strip(),
+            "pattern": meta["pattern"],
+            "semantic": meta["semantic"],
+        })
+    return rows
+
+
+def _split_row(stripped: str) -> list[str]:
+    """Split a markdown table row into its cells.
+
+    The first 4 pipes delimit construct/severity/why/emu; everything after the
+    5th pipe is the rewrite cell, which may itself contain pipes (code). We cut
+    on the first 5 pipes and keep the remainder as the rewrite, intact.
+    """
+    body = stripped.strip().strip("|")
+    idx = []
+    i = 0
+    while i < len(body):
+        j = body.find("|", i)
+        if j == -1:
+            break
+        idx.append(j)
+        i = j + 1
+    if len(idx) < 4:
+        return [body]
+    cuts = [body[:idx[0]]] + [body[idx[k] + 1: idx[k + 1]] for k in range(3)] + [body[idx[3] + 1:]]
+    return [c.strip() for c in cuts]
+
+def _pattern_rows() -> list[dict]:
+    """Only the constructs that carry a deterministic pattern."""
+    return [r for r in construct_rows() if r["pattern"]]
+
+
+# The detectable registry, derived from CONSTRUCTS.md (single source of truth).
+def _build_registry() -> dict[str, tuple[re.Pattern, str, str]]:
+    return {
+        r["construct"]: (re.compile(r["pattern"]), r["severity"], r["category"])
+        for r in _pattern_rows()
+    }
+
 
 # Files that are testbench and must be skipped, by convention.
 _TB_PATTERNS = (re.compile(r"_tb\.sv$"), re.compile(r"_tb\.v$"))
@@ -78,12 +164,17 @@ def detect_findings(path: Path) -> list[dict]:
     """Return the Findings for one file as a list of dicts.
 
     A Finding is: {file, line, construct, severity, category}.
+    Detection patterns come from CONSTRUCTS.md (single source of truth). Lines
+    are stripped of `//` comments and string literals' content before matching,
+    so words in comments or strings don't trigger false Findings.
     """
+    registry = _build_registry()
     text = path.read_text()
     findings: list[dict] = []
     for lineno, line in enumerate(text.splitlines(), start=1):
-        for regex, construct, severity, category in _TRACER_CONSTRUCTS:
-            if regex.search(line):
+        probe = _strip_comments(line)
+        for construct, (regex, severity, category) in registry.items():
+            if regex.search(probe):
                 findings.append({
                     "file": path.name,
                     "line": lineno,
@@ -94,17 +185,44 @@ def detect_findings(path: Path) -> list[dict]:
     return findings
 
 
-def detect(path: Path) -> list[dict]:
-    """Detect Findings over a file or directory, skipping testbench."""
+def _strip_comments(line: str) -> str:
+    """Remove a trailing `//` line comment and the contents of "..." string
+    literals, so words inside them don't match detection patterns."""
+    # Drop everything from an unquoted `//`.
+    in_str = False
+    out: list[str] = []
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if ch == '"' and (i == 0 or line[i - 1] != "\\"):
+            in_str = not in_str
+        if not in_str and ch == "/" and i + 1 < len(line) and line[i + 1] == "/":
+            break
+        if in_str and ch != '"':
+            out.append(" ")
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+def detect(path: Path, allowlist: set[str] | None = None) -> list[dict]:
+    """Detect Findings over a file or directory, skipping testbench.
+
+    When an allowlist set is passed, a Finding against an allowlisted construct
+    downgrades to 'note'. When None (default), no allowlist is applied and base
+    severities govern — callers that want the shipped seed allowlist pass it
+    explicitly via parse_allowlist().
+    """
     if path.is_dir():
         results: list[dict] = []
         for f in sorted(path.rglob("*")):
             if f.is_file() and is_rtl(f) and not is_testbench(f):
                 results.extend(detect_findings(f))
-        return results
-    if is_rtl(path) and not is_testbench(path):
-        return detect_findings(path)
-    return []
+    elif is_rtl(path) and not is_testbench(path):
+        results = detect_findings(path)
+    else:
+        results = []
+    return apply_allowlist(results, allowlist or set())
 
 
 # --------------------------------------------------------------------------- #
@@ -171,6 +289,57 @@ def test_detect_reproduces_structural_port_manifest():
     assert sorted(_key(f) for f in actual) == sorted(_key(f) for f in manifest)
 
 
+# --------------------------------------------------------------------------- #
+# Single-source-of-truth invariants (ticket 07).
+# --------------------------------------------------------------------------- #
+
+def test_detection_registry_derives_from_constructs_md():
+    """The detectable registry is built FROM CONSTRUCTS.md, not a parallel list.
+
+    Every construct whose row carries a pattern comment must appear in the
+    registry; every registry entry must trace to a row. No separate hardcoded
+    construct list exists.
+    """
+    registry = _build_registry()
+    pattern_rows = _pattern_rows()
+    assert set(registry.keys()) == {r["construct"] for r in pattern_rows}
+
+
+def test_adding_a_construct_with_a_pattern_extends_detection(tmp_path):
+    """A construct added to CONSTRUCTS.md with a pattern is detected without
+    touching detection code — the single-source-of-truth invariant."""
+    # Build a throwaway CONSTRUCTS.md with one extra construct + pattern.
+    constructs = (SKILL / "CONSTRUCTS.md").read_text()
+    injected = constructs + (
+        "\n| `testonly_marker` | error | test | Unsupported. | x | <!-- pattern: testonly_marker_regex -->\n"
+    )
+    new_skill = tmp_path / "skill"
+    new_skill.mkdir()
+    (new_skill / "CONSTRUCTS.md").write_text(injected)
+    # Point the module's SKILL path at the throwaway and re-derive the registry.
+    import test_detect as td
+    orig = td.SKILL
+    td.SKILL = new_skill
+    try:
+        reg = td._build_registry()
+        assert "testonly_marker" in reg
+        # The original constructs are still present (no regression from the add).
+        assert "#delay" in reg
+    finally:
+        td.SKILL = orig
+
+
+def test_finding_shape_matches_manifest_and_skill():
+    """The Finding shape is consistent across CONSTRUCTS.md, the manifests, and
+    SKILL.md: {file, line, construct, severity, category}."""
+    findings = detect(FIXTURES / "timing_sim_only.sv")
+    for f in findings:
+        assert set(f.keys()) == {"file", "line", "construct", "severity", "category"}
+    # SKILL.md's Finding fields must match this shape (no stray 'ref'-only claim).
+    skill = (SKILL / "SKILL.md").read_text()
+    assert "category" in skill
+
+
 def test_detect_produces_count_summary():
     """Detect emits a one-line summary of error/warning/note counts."""
     actual = detect(FIXTURES / "timing_sim_only.sv")
@@ -213,17 +382,24 @@ def test_detect_defaults_to_rtl_dir(tmp_path, monkeypatch):
 
 def test_allowlist_downgrades_to_note():
     """A construct in the allowlist is reported at note severity."""
-    findings = detect(FIXTURES / "timing_sim_only.sv")
-    with_allow = apply_allowlist(findings, allowlist={"#delay"})
-    delays = [f for f in with_allow if f["construct"] == "#delay"]
+    findings = detect(FIXTURES / "timing_sim_only.sv", allowlist={"#delay"})
+    delays = [f for f in findings if f["construct"] == "#delay"]
     assert delays and all(f["severity"] == "note" for f in delays)
 
 
 def test_without_allowlist_construct_is_at_base_severity():
     """Without the allowlist, the same construct is at its base severity."""
     findings = detect(FIXTURES / "timing_sim_only.sv")
-    without = apply_allowlist(findings, allowlist=set())
-    delays = [f for f in without if f["construct"] == "#delay"]
+    delays = [f for f in findings if f["construct"] == "#delay"]
+    assert delays and all(f["severity"] == "error" for f in delays)
+
+
+def test_shipped_seed_allowlist_applies_in_detection():
+    """Detect wired to the shipped seed allowlist (empty) leaves severities unchanged."""
+    seed = parse_allowlist(FIXTURES.parent / "docs" / "agents" / "emulation-allowlist.md")
+    findings = detect(FIXTURES / "timing_sim_only.sv", allowlist=seed)
+    # Empty seed -> all #delay at base error severity (no downgrades).
+    delays = [f for f in findings if f["construct"] == "#delay"]
     assert delays and all(f["severity"] == "error" for f in delays)
 
 
@@ -247,7 +423,7 @@ def count_summary(findings: list[dict]) -> str:
 
 
 def _key(f: dict):
-    return (f["file"], f["line"], f["construct"], f["severity"], f["category"])
+    return (f["file"], f["line"], f["construct"], f["severity"], _category_key(f["category"]))
 
 
 # --------------------------------------------------------------------------- #

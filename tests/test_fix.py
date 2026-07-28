@@ -20,8 +20,9 @@ import pytest
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 SKILL = Path(__file__).resolve().parent.parent / ".claude" / "skills" / "synth-check-rtl"
 
-# Re-use the Detect routine + construct registry from the Detect test.
-from test_detect import detect, CONSTRUCT_REGISTRY  # noqa: E402
+# Re-use the Detect routine from the Detect test. CONSTRUCTS.md is the single
+# source of truth for both detection and the explain/fix lookups below.
+from test_detect import detect, construct_rows  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -32,15 +33,23 @@ def explain(construct: str) -> dict:
     """Look up a construct's why + emulator-config option from CONSTRUCTS.md.
 
     Loads only the asked construct's row (on demand), not the whole table.
-    Returns {construct, why, emulator_config}.
+    Returns {construct, why, emulator_config}. Trailing detection comments are
+    stripped from the text fields.
     """
     row = _construct_row(construct)
     assert row is not None, f"construct {construct!r} not in CONSTRUCTS.md"
     return {
         "construct": row["construct"],
-        "why": row["why"],
-        "emulator_config": row["emulator_config"],
+        "why": _clean(row["why"]),
+        "emulator_config": _clean(row["emulator_config"]),
     }
+
+
+def _clean(text: str) -> str:
+    """Strip a trailing `<!-- ... -->` detection comment (which may itself
+    contain `//` from `pattern:...` and so must be removed before any `//`
+    splitting). Non-greedy, anchored to the end of the cell."""
+    return re.sub(r"<!--.*?-->\s*$", "", text, flags=re.DOTALL).strip()
 
 
 def fix(construct: str) -> str:
@@ -48,56 +57,20 @@ def fix(construct: str) -> str:
 
     Loads only the asked construct's row from CONSTRUCTS.md. The rewrite is the
     decision-rich part; the skill surfaces it for review and edits no file until
-    the user confirms.
+    the user confirms. The trailing `<!-- ... -->` detection comment is stripped
+    so the rewrite cell is clean.
     """
     row = _construct_row(construct)
     assert row is not None, f"construct {construct!r} not in CONSTRUCTS.md"
-    return row["rewrite"]
+    return _clean(row["rewrite"])
 
 
 # --------------------------------------------------------------------------- #
-# CONSTRUCTS.md parser — the single source of truth. Parsed on demand.
+# Per-item row lookup — reuses the single-source parser from test_detect.
 # --------------------------------------------------------------------------- #
-
-_TABLE_ROW = re.compile(r"\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|")
-
-
-def _construct_name(raw: str) -> str:
-    """Normalize a CONSTRUCTS.md construct cell to the registry's short name.
-
-    CONSTRUCTS.md uses richer forms (e.g. `wait(sig)`, `force`/`release`); the
-    detector's registry uses the short token (e.g. `wait`). Strip backticks and
-    parens and take the leading token so the two vocabularies join.
-    """
-    name = raw.strip().strip("`")
-    # take everything up to '(' or '/'
-    name = re.split(r"[/(]", name)[0]
-    return name.strip()
-
-
-def _construct_rows() -> list[dict]:
-    rows: list[dict] = []
-    text = (SKILL / "CONSTRUCTS.md").read_text()
-    for line in text.splitlines():
-        m = _TABLE_ROW.match(line.strip())
-        if not m:
-            continue
-        construct, severity, why, emu, rewrite = (g.strip() for g in m.groups())
-        # Skip header / separator rows.
-        if construct.lower() in {"construct", "---"} or set(construct) <= {"-"}:
-            continue
-        rows.append({
-            "construct": _construct_name(construct),
-            "severity": severity,
-            "why": why,
-            "emulator_config": emu,
-            "rewrite": rewrite,
-        })
-    return rows
-
 
 def _construct_row(construct: str) -> dict | None:
-    rows = {r["construct"]: r for r in _construct_rows()}
+    rows = {r["construct"]: r for r in construct_rows()}
     return rows.get(construct)
 
 

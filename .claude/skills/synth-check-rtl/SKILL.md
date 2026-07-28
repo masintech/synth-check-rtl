@@ -32,22 +32,37 @@ directory present, scan `rtl/`.
 ### Step 1 — Detect
 
 Scan the given path. For every `.v`/`.sv`/`.vhd` file, skip testbench
-(`*_tb.sv`/`*_tb.v`, or any path under `bench/`/`tb/`) silently. For each
-remaining line, test it against every construct in the reference — reached by
-the context pointer below. Every match is one **Finding**:
-`file:line | construct | severity | ref`.
+(`*_tb.sv`/`*_tb.v`, or any path under `bench/`/`tb/`) silently. Detect runs in
+two passes over the construct reference, reached by the context pointer below:
+
+- **Pattern pass** — for each construct whose row carries a `pattern:` comment,
+  test every remaining line against that pattern. Every match is one **Finding**.
+- **Reasoning pass** — for constructs whose row carries no pattern (semantic
+  ones: CDC, logic on reset/clock, multi-edge sensitivity, inferred latch, mixed
+  logic), reason against `SYNTH-RULES.md` to decide whether the code is a real
+  instance. A valid async reset (`posedge clk or negedge rst`) is not flagged; a
+  dual-clock hazard (`posedge a or posedge b`) is. This pass is model-dependent —
+  treat accuracy as probabilistic, not guaranteed.
+
+Every Finding carries `file:line | construct | severity | category`.
+
+The reference is the single source of truth: adding a construct with its pattern
+to `CONSTRUCTS.md` extends detection — edit one place, detection follows. Load
+the reference one row at a time, never the whole table.
 
 **Completion criterion (exhaustive + checkable):** every line of every scanned
-RTL file has been tested against every construct in the reference, and every
-match is a Finding. Testbench files are skipped, not flagged. Detect edits no
-file and produces no per-item why or fix.
+RTL file has been tested against every pattern-bearing construct, and every
+semantic construct has been reasoned about. Every match is a Finding. Testbench
+files are skipped, not flagged. Detect edits no file and produces no per-item
+why or fix.
 
-Load the construct reference only when Step 1 needs it to classify a match — and
-again in Step 2 on demand. Load it one row at a time, never the whole table.
+Apply the allowlist (`docs/agents/emulation-allowlist.md`) within Detect: a
+Finding against a listed construct downgrades to `note`. Absent the allowlist,
+base severities govern.
 
 ### Step 2 — Report (Detect output)
 
-Print the Findings as a lean table — `file:line | construct | severity | ref` —
+Print the Findings as a lean table — `file:line | construct | severity | category` —
 then a one-line summary: `N findings: X errors, Y warnings, Z notes`.
 
 **Completion criterion:** the table's error/warning/note counts equal the
