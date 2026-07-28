@@ -1,3 +1,10 @@
+# Python
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Local Serena config (per-machine; not published)
+.serena/
+
+# Development-stage planning (kept out of the published repo)
+plan.md
