@@ -49,23 +49,23 @@ Loaded on demand (per Finding), never bulk-loaded during Detect.
 
 | Construct                              | Severity | Why                                                  | Emulator-config option | Synthesizable rewrite                                                |
 |----------------------------------------|----------|------------------------------------------------------|------------------------|----------------------------------------------------------------------|
-| inferred latch (incomplete `if/else`)  | warning  | Missing branch holds value -> latch.                  | Emulators latch-prone; some warn. | Add the `else` branch to assign every output. <!-- name:inferred latch | semantic:incomplete-if-else -->
-| inferred latch (missing `case`/`default`) | warning | Uncovered case holds value -> latch.               | As above.              | Add `default` assigning every output. <!-- semantic:case-no-default -->
-| multi-driver net                       | warning  | Two drivers on one net -> X / contention.            | Some flows flag it.   | Drive each net from exactly one `always` block. <!-- semantic:multi-driver -->
-| blocking (`=`) in clocked block        | warning  | Blocking in sequential logic -> race / wrong order.  | As above.              | Use nonblocking (`<=`) in clocked `always_ff`. <!-- semantic:blocking-in-clocked -->
-| logic on reset (non-constant RHS)     | warning  | Non-constant sampled on reset -> MUX/logic on reset net; glitch risk. | Some flows accept it. | Reset to a constant only; sample inputs in the combinational block (see SYNTH-RULES Rule 1). <!-- semantic:logic-on-reset -->
-| logic on clock                         | warning  | Combinational logic on the clock net -> glitch risk.  | Some flows accept it.  | Clock the register on a clean clock edge; move logic to a separate combinational block. <!-- semantic:logic-on-clock -->
-| clock-domain crossing (CDC)            | warning  | Signal from one async clock domain used in another without a synchroniser -> metastability. | Some flows flag CDC. | Insert a synchroniser (dual-flop) at the crossing (see SYNTH-RULES Rule 1). <!-- semantic:cdc -->
-| mixed logic in sequential block        | warning  | Combinational cloud inside a sequential block -> breaks direct FF mapping. | Some flows accept it. | Move combinational logic to an `always @*` block; keep the sequential block a clean register (see SYNTH-RULES Rule 3). <!-- semantic:mixed-logic -->
-| multi-edge sensitivity (`posedge a or posedge b`) | warning | Two edge sources -> ambiguous FF control; usually a dual-clock hazard. | Rarely supported. | One clock + one async reset only. If two clocks, that's a CDC — use a synchroniser (see SYNTH-RULES Rule 1). <!-- semantic:multi-edge -->
+| inferred latch (incomplete `if/else`)  | warning  | Missing branch holds value -> latch.                  | Emulators latch-prone; some warn. | Add the `else` branch to assign every output. <!-- name:inferred latch (if/else) | semantic:incomplete-if-else -->
+| inferred latch (missing `case`/`default`) | warning | Uncovered case holds value -> latch.               | As above.              | Add `default` assigning every output. <!-- name:inferred latch (case) | semantic:case-no-default -->
+| multi-driver net                       | warning  | Two drivers on one net -> X / contention.            | Some flows flag it.   | Drive each net from exactly one `always` block. <!-- name:multi-driver net | semantic:multi-driver -->
+| blocking (`=`) in clocked block        | warning  | Blocking in sequential logic -> race / wrong order.  | As above.              | Use nonblocking (`<=`) in clocked `always_ff`. <!-- name:blocking in clocked block | semantic:blocking-in-clocked -->
+| logic on reset (non-constant RHS)     | warning  | Non-constant sampled on reset -> MUX/logic on reset net; glitch risk. | Some flows accept it. | Reset to a constant only; sample inputs in the combinational block (see SYNTH-RULES Rule 1). <!-- name:logic on reset | semantic:logic-on-reset -->
+| logic on clock                         | warning  | Combinational logic on the clock net -> glitch risk.  | Some flows accept it.  | Clock the register on a clean clock edge; move logic to a separate combinational block. <!-- name:logic on clock | semantic:logic-on-clock -->
+| clock-domain crossing (CDC)            | warning  | Signal from one async clock domain used in another without a synchroniser -> metastability. | Some flows flag CDC. | Insert a synchroniser (dual-flop) at the crossing (see SYNTH-RULES Rule 1). <!-- name:clock-domain crossing | semantic:cdc -->
+| mixed logic in sequential block        | warning  | Combinational cloud inside a sequential block -> breaks direct FF mapping. | Some flows accept it. | Move combinational logic to an `always @*` block; keep the sequential block a clean register (see SYNTH-RULES Rule 3). <!-- name:mixed logic in sequential block | semantic:mixed-logic -->
+| multi-edge sensitivity (`posedge a or posedge b`) | warning | Two edge sources -> ambiguous FF control; usually a dual-clock hazard. | Rarely supported. | One clock + one async reset only. If two clocks, that's a CDC — use a synchroniser (see SYNTH-RULES Rule 1). <!-- name:multi-edge sensitivity | semantic:multi-edge -->
 
 ## 4. Structural / port
 
 | Construct                          | Severity | Why                                              | Emulator-config option | Synthesizable rewrite                                         |
 |------------------------------------|----------|--------------------------------------------------|------------------------|---------------------------------------------------------------|
-| `generate` misuse                  | note     | Mis-scoped generate can break synthesis.          | Flow-dependent.        | Place `generate`/`endgenerate` correctly; use `genvar`. <!-- semantic:generate-misuse -->
+| `generate` misuse                  | note     | Mis-scoped generate can break synthesis.          | Flow-dependent.        | Place `generate`/`endgenerate` correctly; use `genvar`. <!-- name:generate misuse | semantic:generate-misuse -->
 | `real`/`time` parameter            | error    | Non-synthesizable param type.                    | Unsupported.           | Use integer parameters. <!-- name:real parameter | pattern:parameter\s+(real|time)\b -->
-| port width mismatch                | warning  | Width mismatch truncates / zero-extends.          | Some flows warn.       | Match port widths exactly at instantiation. <!-- semantic:port-width -->
+| port width mismatch                | warning  | Width mismatch truncates / zero-extends.          | Some flows warn.       | Match port widths exactly at instantiation. <!-- name:port width mismatch | semantic:port-width -->
 
 ## Notes
 

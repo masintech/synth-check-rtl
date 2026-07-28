@@ -103,11 +103,18 @@ def construct_rows() -> list[dict]:
             "category": current_category,
             "why": why,
             "emulator_config": emu,
-            "rewrite": re.sub(r"<!--.*?-->\s*$", "", rewrite, flags=re.DOTALL).strip(),
+            "rewrite": _strip_trailing_comment(rewrite),
             "pattern": meta["pattern"],
             "semantic": meta["semantic"],
         })
     return rows
+
+
+def _strip_trailing_comment(text: str) -> str:
+    """Strip a trailing `<!-- ... -->` detection comment from a CONSTRUCTS.md
+    cell, leaving the human-readable content. Single source for this strip —
+    shared by construct_rows() and the fix/explain lookups in test_fix."""
+    return re.sub(r"<!--.*?-->\s*$", "", text, flags=re.DOTALL).strip()
 
 
 def _split_row(stripped: str) -> list[str]:
@@ -205,14 +212,21 @@ def _strip_comments(line: str) -> str:
         i += 1
     return "".join(out)
 
+# The shipped seed allowlist, auto-loaded by detect() when no allowlist is given.
+_SEED_ALLOWLIST = Path(__file__).resolve().parent.parent / "docs" / "agents" / "emulation-allowlist.md"
+
+
 def detect(path: Path, allowlist: set[str] | None = None) -> list[dict]:
     """Detect Findings over a file or directory, skipping testbench.
 
-    When an allowlist set is passed, a Finding against an allowlisted construct
-    downgrades to 'note'. When None (default), no allowlist is applied and base
-    severities govern — callers that want the shipped seed allowlist pass it
-    explicitly via parse_allowlist().
+    The allowlist is applied within detection: a Finding against an allowlisted
+    construct downgrades to 'note'. When `allowlist` is None (the default), the
+    shipped seed at `docs/agents/emulation-allowlist.md` is auto-loaded — so an
+    agent running the skill body with no arguments gets per-project tuning for
+    free. Pass an explicit set (e.g. `set()`) to override and disable it.
     """
+    if allowlist is None:
+        allowlist = parse_allowlist(_SEED_ALLOWLIST)
     if path.is_dir():
         results: list[dict] = []
         for f in sorted(path.rglob("*")):
@@ -222,7 +236,7 @@ def detect(path: Path, allowlist: set[str] | None = None) -> list[dict]:
         results = detect_findings(path)
     else:
         results = []
-    return apply_allowlist(results, allowlist or set())
+    return apply_allowlist(results, allowlist)
 
 
 # --------------------------------------------------------------------------- #
@@ -340,13 +354,18 @@ def test_adding_a_construct_with_a_pattern_extends_detection(tmp_path):
 
 def test_finding_shape_matches_manifest_and_skill():
     """The Finding shape is consistent across CONSTRUCTS.md, the manifests, and
-    SKILL.md: {file, line, construct, severity, category}."""
+    SKILL.md: {file, line, construct, severity, category} — and SKILL.md makes no
+    stale `ref`-field claim."""
     findings = detect(FIXTURES / "timing_sim_only.sv")
     for f in findings:
         assert set(f.keys()) == {"file", "line", "construct", "severity", "category"}
-    # SKILL.md's Finding fields must match this shape (no stray 'ref'-only claim).
     skill = (SKILL / "SKILL.md").read_text()
     assert "category" in skill
+    # The stale claim "A Finding's `ref` names a construct" (the old Vocabularies
+    # section) must be gone — it contradicted the {construct, ...} shape.
+    assert "A Finding's `ref`" not in skill and "Finding's `ref`" not in skill, (
+        "SKILL.md still claims a `ref` field — reconcile to {construct, ...}"
+    )
 
 
 def test_detect_skips_testbench_files():
@@ -390,19 +409,25 @@ def test_allowlist_downgrades_to_note():
 
 
 def test_without_allowlist_construct_is_at_base_severity():
-    """Without the allowlist, the same construct is at its base severity."""
-    findings = detect(FIXTURES / "timing_sim_only.sv")
+    """With the allowlist explicitly disabled (empty set), the construct is at
+    its base severity. (The default path auto-loads the shipped seed, which is
+    also empty, so this checks the override path specifically.)"""
+    findings = detect(FIXTURES / "timing_sim_only.sv", allowlist=set())
     delays = [f for f in findings if f["construct"] == "#delay"]
     assert delays and all(f["severity"] == "error" for f in delays)
 
 
-def test_shipped_seed_allowlist_applies_in_detection():
-    """Detect wired to the shipped seed allowlist (empty) leaves severities unchanged."""
-    seed = parse_allowlist(FIXTURES.parent / "docs" / "agents" / "emulation-allowlist.md")
-    findings = detect(FIXTURES / "timing_sim_only.sv", allowlist=seed)
-    # Empty seed -> all #delay at base error severity (no downgrades).
+def test_default_detect_auto_loads_shipped_seed_allowlist():
+    """Calling detect() with no allowlist auto-loads the shipped seed — so an
+    agent running the skill body with no args gets per-project tuning. With the
+    empty shipped seed, severities are unchanged; if the seed listed `#delay`,
+    those Findings would downgrade to note."""
+    findings = detect(FIXTURES / "timing_sim_only.sv")  # default -> shipped seed
     delays = [f for f in findings if f["construct"] == "#delay"]
-    assert delays and all(f["severity"] == "error" for f in delays)
+    assert delays and all(f["severity"] == "error" for f in delays)  # seed is empty
+    # And the default path honors a populated seed the same as an explicit set:
+    findings_with = detect(FIXTURES / "timing_sim_only.sv", allowlist={"#delay"})
+    assert all(f["severity"] == "note" for f in findings_with if f["construct"] == "#delay")
 
 
 def test_absent_allowlist_governs_generically():

@@ -115,9 +115,11 @@ confirmation, and only the confirmed item is rewritten.
 goal), `Finding` (the atomic output). These recruit EDA priors the agent already
 holds; they anchor execution to the same behavior every run.
 
-## Vocabularies
+## Finding fields
 
-A Finding's `ref` names a construct. The detector uses a short token
-(`#delay`, `wait`, `class`); `CONSTRUCTS.md` uses a richer cell
-(`wait(sig)`, `force`/`release`). Join them by the leading token — strip
-backticks, parens, and `/`-alternatives.
+A Finding carries `{file, line, construct, severity, category}`. The `construct`
+field is the canonical short name a row declares via its `name:` comment (e.g.
+`#delay`, `wait`, `class`, `multi-edge sensitivity`). `CONSTRUCTS.md` cells may
+read richer (`wait(sig)`, `force`/`release`); the `name:` field is the single
+join key between a Finding and its reference row — there is no separate `ref`
+field.

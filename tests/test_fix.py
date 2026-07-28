@@ -40,16 +40,23 @@ def explain(construct: str) -> dict:
     assert row is not None, f"construct {construct!r} not in CONSTRUCTS.md"
     return {
         "construct": row["construct"],
-        "why": _clean(row["why"]),
-        "emulator_config": _clean(row["emulator_config"]),
+        "why": row["why"],
+        "emulator_config": row["emulator_config"],
     }
 
 
-def _clean(text: str) -> str:
-    """Strip a trailing `<!-- ... -->` detection comment (which may itself
-    contain `//` from `pattern:...` and so must be removed before any `//`
-    splitting). Non-greedy, anchored to the end of the cell."""
-    return re.sub(r"<!--.*?-->\s*$", "", text, flags=re.DOTALL).strip()
+# construct_rows() already strips the trailing detection comment from `rewrite`
+# (and the comment is only ever appended to the rewrite cell), so why /
+# emulator_config are already clean — no extra stripping needed here.
+
+
+# --------------------------------------------------------------------------- #
+# Per-item row lookup — reuses the single-source parser from test_detect.
+# --------------------------------------------------------------------------- #
+
+def _construct_row(construct: str) -> dict | None:
+    rows = {r["construct"]: r for r in construct_rows()}
+    return rows.get(construct)
 
 
 def fix(construct: str) -> str:
@@ -57,12 +64,12 @@ def fix(construct: str) -> str:
 
     Loads only the asked construct's row from CONSTRUCTS.md. The rewrite is the
     decision-rich part; the skill surfaces it for review and edits no file until
-    the user confirms. The trailing `<!-- ... -->` detection comment is stripped
-    so the rewrite cell is clean.
+    the user confirms. construct_rows() has already stripped the detection
+    comment, so the cell is clean.
     """
     row = _construct_row(construct)
     assert row is not None, f"construct {construct!r} not in CONSTRUCTS.md"
-    return _clean(row["rewrite"])
+    return row["rewrite"]
 
 
 # --------------------------------------------------------------------------- #
@@ -108,7 +115,21 @@ def test_fix_phase_rewrites_match_expected_manifest():
 
 
 def test_fix_is_one_item_at_a_time_not_bulk():
-    """Fix returns a single rewrite for the asked construct, not all rewrites."""
+    """Fix returns a single rewrite for the asked construct, not all rewrites.
+
+    A bulk fix would have to return multiple rewrites or mutate multiple
+    constructs; here we get exactly one string for one construct, with no file
+    mutation. The rewrite is a clocked idiom (the wait -> edge-detect rewrite),
+    not a restatement of `wait`."""
     out = fix("wait")
     assert isinstance(out, str)
-    assert "wait" not in out.lower() or "clk" in out  # rewritten, not echoed
+    assert "clk" in out           # rewritten to a clocked idiom
+    assert "wait" not in out      # the behavioral construct is gone, not echoed
+
+
+def test_explain_distinct_inferred_latch_variants_dont_collide():
+    """The two `inferred latch` rows have distinct names so the fix/explain
+    lookup doesn't silently overwrite one with the other."""
+    assert _construct_row("inferred latch (if/else)") is not None
+    assert _construct_row("inferred latch (case)") is not None
+    assert _construct_row("inferred latch (if/else)") is not _construct_row("inferred latch (case)")

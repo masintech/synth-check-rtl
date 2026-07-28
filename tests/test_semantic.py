@@ -77,9 +77,14 @@ def test_valid_async_reset_is_not_pattern_flagged(tmp_path):
     findings = detect_findings(fixture)
     # No pattern construct should fire on the valid async reset (line 17) or on
     # the reasoning-only lines — pattern detection returns nothing here.
+    findings = detect_findings(fixture)
     flagged_lines = {f["line"] for f in findings}
-    # The valid async reset (line 17) must never appear as a pattern Finding.
-    assert 17 not in flagged_lines, f"valid async reset pattern-flagged: {findings}"
+    # The valid async reset is the `always_ff @(posedge clk or negedge rst_n)`
+    # on line 20 (line 17 is a comment). It must never appear as a pattern
+    # Finding — pattern detection has no `posedge` pattern, so the reasoning
+    # pass owns the judgment that this form is valid.
+    assert 20 not in flagged_lines, f"valid async reset pattern-flagged: {findings}"
+    assert 18 not in flagged_lines, f"valid async reset body pattern-flagged: {findings}"
 
 
 # --------------------------------------------------------------------------- #
@@ -99,13 +104,17 @@ def test_semantic_fixture_and_manifest_exist():
         )
 
 
-def test_semantic_manifest_records_three_reasoning_findings():
-    """The fixture carries exactly the three reasoning cases it documents."""
+def test_semantic_manifest_covers_every_reasoning_construct():
+    """The fixture carries one case per semantic construct declared in
+    CONSTRUCTS.md — so every reasoning construct has a known-case fixture."""
     manifest = parse_manifest(FIXTURES / "semantic.expected.md")
-    constructs = {row["construct"] for row in manifest}
-    assert constructs == {
-        "multi-edge sensitivity", "logic on reset", "clock-domain crossing",
-    }
+    declared = {r["construct"] for r in construct_rows() if r["semantic"]}
+    manifest_constructs = {row["construct"] for row in manifest}
+    missing = declared - manifest_constructs
+    assert not missing, f"semantic constructs with no fixture case: {missing}"
+    # And every manifest construct is a declared semantic construct.
+    extra = manifest_constructs - declared
+    assert not extra, f"manifest constructs not declared semantic: {extra}"
 
 
 # --------------------------------------------------------------------------- #
