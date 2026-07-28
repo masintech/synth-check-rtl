@@ -51,6 +51,13 @@ _TRACER_CONSTRUCTS = [
     (re.compile(r"parameter\s+real\b"),                 "real parameter",           "error",   "structural/port"),
 ]
 
+# Stable registry: construct name -> (severity, category), for the detectable
+# subset. (CONSTRUCTS.md is the full source of truth; this maps the constructs
+# the detector can currently flag by pattern.)
+CONSTRUCT_REGISTRY: dict[str, tuple[str, str]] = {
+    name: (severity, category) for _r, name, severity, category in _TRACER_CONSTRUCTS
+}
+
 # Files that are testbench and must be skipped, by convention.
 _TB_PATTERNS = (re.compile(r"_tb\.sv$"), re.compile(r"_tb\.v$"))
 _TB_DIRS = ("bench", "tb")
