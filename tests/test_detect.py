@@ -35,11 +35,20 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 # Tracer-bullet construct subset: timing & sim-only.
 # Each entry: (regex, construct name, severity, category)
 _TRACER_CONSTRUCTS = [
-    (re.compile(r"#\d+"),                        "#delay",    "error", "timing & sim-only"),
-    (re.compile(r"\$display\b"),                 "$display",  "error", "timing & sim-only"),
-    (re.compile(r"\bwait\s*\("),                 "wait",      "error", "timing & sim-only"),
-    (re.compile(r"\bforever\b"),                  "forever",   "error", "timing & sim-only"),
-    (re.compile(r"\binitial\b"),                  "initial",   "error", "timing & sim-only"),
+    (re.compile(r"#\d+"),                             "#delay",                   "error",   "timing & sim-only"),
+    (re.compile(r"\$display\b"),                      "$display",                 "error",   "timing & sim-only"),
+    (re.compile(r"\bwait\s*\("),                      "wait",                     "error",   "timing & sim-only"),
+    (re.compile(r"\bforever\b"),                       "forever",                  "error",   "timing & sim-only"),
+    (re.compile(r"\binitial\b"),                       "initial",                  "error",   "timing & sim-only"),
+    # SV testbench-isms
+    (re.compile(r"\w+\s*\[\s*\]"),                     "dynamic array",            "error",   "SV testbench-isms"),
+    (re.compile(r"\w+\s*\[[a-zA-Z_]\w*\]"),            "associative array",        "error",   "SV testbench-isms"),
+    (re.compile(r"\[\s*\$"),                            "queue",                    "error",   "SV testbench-isms"),
+    (re.compile(r"\bclass\b"),                          "class",                    "error",   "SV testbench-isms"),
+    # synthesis-correctness
+    (re.compile(r"always\s*@\s*\(\s*\*\s*\)"),          "inferred latch",           "warning", "synthesis-correctness"),
+    # structural / port
+    (re.compile(r"parameter\s+real\b"),                 "real parameter",           "error",   "structural/port"),
 ]
 
 # Files that are testbench and must be skipped, by convention.
@@ -132,15 +141,27 @@ def test_detect_reproduces_timing_sim_only_manifest():
     fixture = FIXTURES / "timing_sim_only.sv"
     manifest = parse_manifest(FIXTURES / "timing_sim_only.expected.md")
 
-    actual = detect(fixture)
+    actual = detect(FIXTURES / "timing_sim_only.sv")
     # Order-independent comparison: same set of Findings.
-    assert sorted(
-        (f["file"], f["line"], f["construct"], f["severity"], f["category"])
-        for f in actual
-    ) == sorted(
-        (f["file"], f["line"], f["construct"], f["severity"], f["category"])
-        for f in manifest
-    )
+    assert sorted(_key(f) for f in actual) == sorted(_key(f) for f in manifest)
+
+
+def test_detect_reproduces_sv_testbench_isms_manifest():
+    manifest = parse_manifest(FIXTURES / "sv_testbench_isms.expected.md")
+    actual = detect(FIXTURES / "sv_testbench_isms.sv")
+    assert sorted(_key(f) for f in actual) == sorted(_key(f) for f in manifest)
+
+
+def test_detect_reproduces_synth_correctness_manifest():
+    manifest = parse_manifest(FIXTURES / "synth_correctness.expected.md")
+    actual = detect(FIXTURES / "synth_correctness.sv")
+    assert sorted(_key(f) for f in actual) == sorted(_key(f) for f in manifest)
+
+
+def test_detect_reproduces_structural_port_manifest():
+    manifest = parse_manifest(FIXTURES / "structural_port.expected.md")
+    actual = detect(FIXTURES / "structural_port.sv")
+    assert sorted(_key(f) for f in actual) == sorted(_key(f) for f in manifest)
 
 
 def test_detect_produces_count_summary():
@@ -184,3 +205,7 @@ def count_summary(findings: list[dict]) -> str:
     warns = sum(1 for f in findings if f["severity"] == "warning")
     notes = sum(1 for f in findings if f["severity"] == "note")
     return f"{len(findings)} findings: {errs} errors, {warns} warnings, {notes} notes"
+
+
+def _key(f: dict):
+    return (f["file"], f["line"], f["construct"], f["severity"], f["category"])
