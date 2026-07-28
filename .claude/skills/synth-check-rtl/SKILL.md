@@ -43,7 +43,7 @@ match is a Finding. Testbench files are skipped, not flagged. Detect edits no
 file and produces no per-item why or fix.
 
 Load the construct reference only when Step 1 needs it to classify a match — and
-again in Step 2 on demand. Do not bulk-load it.
+again in Step 2 on demand. Load it one row at a time, never the whole table.
 
 ### Step 2 — Report (Detect output)
 
@@ -53,7 +53,8 @@ then a one-line summary: `N findings: X errors, Y warnings, Z notes`.
 **Completion criterion:** the table's error/warning/note counts equal the
 summary line. Every Finding has all five fields.
 
-Stop here. Do not explain, do not fix, do not edit. Wait for the user.
+Stop here. Wait for the user. Explanations, fixes, and file edits happen only in
+Steps 3–4, on request.
 
 ### Step 3 — On demand: explain a specific Finding
 
@@ -90,3 +91,10 @@ confirmation, and only the confirmed item is rewritten.
 `behavioral` (what gets flagged), `synthesizable` (the target), `bring-up` (the
 goal), `Finding` (the atomic output). These recruit EDA priors the agent already
 holds; they anchor execution to the same behavior every run.
+
+## Vocabularies
+
+A Finding's `ref` names a construct. The detector uses a short token
+(`#delay`, `wait`, `class`); `CONSTRUCTS.md` uses a richer cell
+(`wait(sig)`, `force`/`release`). Join them by the leading token — strip
+backticks, parens, and `/`-alternatives.
