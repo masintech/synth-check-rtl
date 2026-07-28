@@ -15,12 +15,12 @@ config/construct, or by rewriting to a **synthesizable** idiom.
 **Lightweight first.** The first pass does the minimum: scan, match, **list**.
 It edits nothing, explains nothing per-item, and computes no fixes. The heavy
 per-item detail loads only when the user points at one specific **Finding**.
-Defaulting to generating fixes for every behavioral code would be slow and
-token-heavy; this skill never does that.
+The skill generates a fix for the asked item only — generating fixes for every
+behavioral code at once would be slow and token-heavy.
 
 This is a portable skill: one shared, agent-agnostic body holds all the logic;
 each tool (Claude Code, Cursor, Copilot) reaches it through a thin wrapper that
-points here. Wrappers never duplicate logic.
+points here. Wrappers carry no duplicated logic.
 
 ## Invocation
 
@@ -51,7 +51,7 @@ Every Finding carries `file:line | construct | severity | category`.
 
 The reference is the single source of truth: adding a construct with its pattern
 to `CONSTRUCTS.md` extends detection — edit one place, detection follows. Load
-the reference one row at a time, never the whole table.
+the reference one row at a time, leaving the rest unloaded.
 
 **Completion criterion (exhaustive + checkable):** every line of every scanned
 RTL file has been tested against every pattern-bearing construct, and every
@@ -81,25 +81,25 @@ construct's reference entry and show why it is non-synthesizable and the
 emulator-config/construct option that lets it run as-is. Edit nothing.
 
 **Completion criterion:** the asked Finding's why and emulator-config option are
-shown, drawn from its reference entry. No other Finding is explained. No file is
-edited.
+shown, drawn from its reference entry. Only that Finding is explained; the
+others stay untouched, and no file is edited.
 
 ### Step 4 — On demand: fix a specific Finding
 
 Only when the user asks to fix a specific Finding. Generate the **synthesizable**
 idiom-level rewrite for that one Finding, drawn from its reference entry. Surface
-it for review. Edit no file until the user confirms that rewrite.
+it for review. Edit a file only after the user confirms that rewrite.
 
 **Completion criterion:** the asked Finding has a synthesizable rewrite shown.
-Fixes are one item at a time — never all at once. No file is edited before
-confirmation, and only the confirmed item is rewritten.
+Fixes proceed one item at a time. A file is edited only after confirmation, and
+only the confirmed item is rewritten.
 
 ## Context pointers
 
 - **Construct reference:** [`CONSTRUCTS.md`](CONSTRUCTS.md) — the single source
   of truth. Each construct co-locates its severity, why, emulator-config option,
-  and synthesizable rewrite in one row. Loaded on demand, never bulk. Change a
-  verdict or rewrite here and Detect/Fix follow.
+  and synthesizable rewrite in one row. Loaded one row at a time, on demand.
+  Change a verdict or rewrite here and Detect/Fix follow.
 - **Synthesizable-RTL rules & canonical forms:** [`SYNTH-RULES.md`](SYNTH-RULES.md)
   — the three unforgivable rules (no logic on reset/clock, no latches, separate
   sequential/combinational) with good/bad examples. Consult when classifying a

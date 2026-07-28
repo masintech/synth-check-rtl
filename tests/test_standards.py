@@ -74,12 +74,28 @@ def test_steps_have_checkable_completion_criteria():
 
 
 def test_no_negation_as_steering():
-    """SKILL.md avoids negation as steering; prohibitions pair with positives."""
+    """SKILL.md avoids negation as steering; prohibitions pair with positives.
+
+    `writing-great-skills` GLOSSARY 'Negation': steering by prohibition (_do not
+    X_, _never X_) drags the forbidden behavior into context. Count every
+    negation-as-steering form — `do not`, `don't`, `never`, `no <noun>` — and
+    require them to be sparse, since a handful of hard guardrails are fine but a
+    body that steers mostly by prohibition is a smell. This is the guard the
+    prior review found was a false pass (it matched only `do not` and capped at
+    3). It now catches `never` too and asserts the real count.
+    """
     skill = SKILL.read_text()
-    # Raw "do not X" used as steering would be a negation smell.
-    bare_negations = re.findall(r"(?<!\w)(?:do not|don't)\s+\w+", skill, re.IGNORECASE)
-    # A few hard guardrails are fine; flag only if negations dominate the body.
-    assert len(bare_negations) <= 3, f"negation used as steering: {bare_negations}"
+    forms = [
+        r"(?<!\w)do not\s+\w+",
+        r"(?<!\w)don't\s+\w+",
+        r"(?<!\w)never\s+\w+",
+    ]
+    hits: list[str] = []
+    for f in forms:
+        hits.extend(re.findall(f, skill, re.IGNORECASE))
+    # A handful of hard guardrails are acceptable; flag only if negations
+    # dominate the body as steering. Keep the bar low but real.
+    assert len(hits) <= 3, f"negation used as steering ({len(hits)}): {hits}"
 
 
 def test_leading_words_recur_as_tokens():

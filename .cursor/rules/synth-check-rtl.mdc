@@ -5,26 +5,13 @@ alwaysApply: false
 
 # synth-check-rtl (Cursor rule)
 
-This is a **thin wrapper**. The skill's logic lives once in the shared,
-agent-agnostic body — do NOT duplicate it here. When invoked (by typing
-`@synth-check-rtl` in chat, with a path argument), follow the shared body
-exactly.
+A **thin wrapper**: the skill's logic lives once in the shared, agent-agnostic
+body — invoke it by typing `@synth-check-rtl <file|dir>` in chat (defaults to
+`rtl/` when no path is given and that directory exists), then follow the shared
+body exactly.
 
 **Shared body:** [`.claude/skills/synth-check-rtl/SKILL.md`](../../.claude/skills/synth-check-rtl/SKILL.md)
 
-Read that file and run the flow it describes. Construct reference:
-[`.claude/skills/synth-check-rtl/CONSTRUCTS.md`](../../.claude/skills/synth-check-rtl/CONSTRUCTS.md) (single source of truth, loaded on demand).
-Allowlist (optional): `docs/agents/emulation-allowlist.md`.
-
-## Invocation
-
-`@synth-check-rtl <file|dir>` — defaults to `rtl/` when no path is given and
-that directory exists.
-
-## Behavior in brief (full detail in the shared body)
-
-Lightweight first: scan `.v`/`.sv`/`.vhd`, skip testbench (`*_tb.sv`/`*_tb.v`,
-`bench/`/`tb/`), list behavioral constructs as lean Findings
-(`file:line | construct | severity | ref`) plus a count summary. Edit nothing.
-On request, explain one Finding (why + emulator-config) or fix one Finding
-(synthesizable rewrite, confirmed before edit) — one item at a time, never bulk.
+Construct reference (single source of truth, loaded on demand):
+[`.claude/skills/synth-check-rtl/CONSTRUCTS.md`](../../.claude/skills/synth-check-rtl/CONSTRUCTS.md).
+Optional allowlist: `docs/agents/emulation-allowlist.md`.

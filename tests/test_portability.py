@@ -39,21 +39,27 @@ def test_wrapper_exists_and_points_at_shared_body(wrapper):
 
 @pytest.mark.parametrize("wrapper", _wrappers(), ids=["cursor", "copilot"])
 def test_wrapper_does_not_duplicate_construct_logic(wrapper):
-    """A wrapper must not carry construct rows — that logic lives once."""
+    """A wrapper must not carry construct rows — that logic lives once.
+
+    A wrapper is a pointer, not a copy. Its body must be far shorter than the
+    shared construct table, and must not reproduce any long prose row from
+    CONSTRUCTS.md (which would be duplication drifting from the single source).
+    """
     text = wrapper.read_text()
     shared_constructs = CONSTRUCTS.read_text()
-    # Extract the severity/rewrite-bearing rows from CONSTRUCTS.md.
-    rows = [l for l in shared_constructs.splitlines() if l.strip().startswith("|") and "error" in l or "warning" in l or "note" in l]
-    # No full construct table row (with its rewrite) should appear verbatim in a wrapper.
-    for row in rows:
-        # Compare the meaningful cell content, not pipe spacing.
-        cells = [c.strip() for c in row.strip("|").split("|") if c.strip()]
-        if len(cells) < 3:
+    # No construct-table rewrite cell (the long prose a row carries) should
+    # appear verbatim in a wrapper.
+    for line in shared_constructs.splitlines():
+        if not line.strip().startswith("|"):
             continue
-        # If a rewrite cell (long prose) appears in the wrapper, that's duplication.
+        cells = [c.strip() for c in line.strip("|").split("|") if c.strip()]
         for cell in cells:
             if len(cell) > 40 and cell in text:
                 pytest.fail(f"wrapper duplicates construct logic: {cell!r}")
+    # And the wrapper is a pointer, so it stays short relative to the full table.
+    assert len(text) < len(shared_constructs), (
+        "wrapper is longer than the shared body it points at — likely duplicated"
+    )
 
 
 def test_cursor_wrapper_is_manual_only():
@@ -64,8 +70,14 @@ def test_cursor_wrapper_is_manual_only():
 
 
 @pytest.mark.parametrize("wrapper", _wrappers(), ids=["cursor", "copilot"])
-def test_wrapper_describes_lightweight_detect(wrapper):
-    """Each wrapper's brief mentions the lightweight-first Detect shape."""
-    text = wrapper.read_text().lower()
-    assert "lightweight" in text
-    assert "finding" in text
+def test_wrapper_points_at_shared_body_and_is_thin(wrapper):
+    """Each wrapper points at the shared body and stays a thin pointer.
+
+    The lightweight-first behavior lives in the shared body; the wrapper need
+    only point there. We assert the pointer is present and the wrapper is a
+    pointer, not a restatement — covered by the exists/thin checks above. This
+    test guards that the pointer text itself is intact.
+    """
+    text = wrapper.read_text()
+    assert ".claude/skills/synth-check-rtl/SKILL.md" in text
+    assert ".claude/skills/synth-check-rtl/CONSTRUCTS.md" in text
