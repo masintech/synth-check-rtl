@@ -15,7 +15,7 @@ module sv_testbench_isms (
     logic [7:0] reg_array [0:15];
 
     always_ff @(posedge clk) begin
-        out <= in;
+        out <= reg_array[in[3:0]];  // variable-indexed RAM read; must NOT be flagged
     end
 
 endmodule

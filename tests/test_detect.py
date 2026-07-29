@@ -295,7 +295,7 @@ def test_detect_produces_count_summary():
     """Detect emits a one-line summary of error/warning/note counts."""
     actual = detect(FIXTURES / "timing_sim_only.sv")
     summary = count_summary(actual)
-    assert summary == "5 findings: 5 errors, 0 warnings, 0 notes"
+    assert summary == "7 findings: 7 errors, 0 warnings, 0 notes"
 
 
 def test_detect_reproduces_synth_correctness_manifest():

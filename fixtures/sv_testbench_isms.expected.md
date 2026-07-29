@@ -9,5 +9,6 @@
 
 Summary: `4 findings: 4 errors, 0 warnings, 0 notes`
 
-The synthesizable `always_ff` (lines 18–20) and the static `reg_array`
-(line 15) must NOT be flagged.
+The synthesizable `always_ff` (lines 18–20), the static `reg_array`
+(line 15), and the variable-indexed RAM read `reg_array[in[3:0]]` (line 18) —
+ordinary array indexing, not an associative array — must NOT be flagged.

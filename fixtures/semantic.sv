@@ -76,13 +76,28 @@ module semantic (
     end
 
     // generate misuse — FLAG (semantic:generate-misuse).
-    // `for` inside `generate` without a `genvar` is a common mis-scoping error.
-    for (i = 0; i < 4; i = i + 1) begin : gen_loop
-        assign q[i] = a;
+    // No block label on the generate-for loop; SV auto-names it (genblkN),
+    // but many flows warn or produce unstable hierarchical paths without an
+    // explicit `begin : name` — a common mis-scoping mistake.
+    logic [3:0] gen_arr;
+    genvar gi;
+    for (gi = 0; gi < 4; gi = gi + 1) begin
+        assign gen_arr[gi] = a;
     end
 
     // port width mismatch — FLAG (semantic:port-width).
-    // 8-bit `in` drives the 4-bit `q[i]` slice above without width match — a
-    // structural port-width mismatch at the implicit connection.
+    // 8-bit wide_a drives sub_narrow's 4-bit `in` port -> width mismatch.
+    // `narrow_out` matches sub_narrow's 4-bit `out` port exactly, so this
+    // instance has exactly one width mismatch, not two.
+    logic [7:0] wide_a;
+    logic [3:0] narrow_out;
+    sub_narrow u_narrow (
+        .in  (wide_a),
+        .out (narrow_out)
+    );
 
+endmodule
+
+module sub_narrow (input logic [3:0] in, output logic [3:0] out);
+    assign out = in;
 endmodule

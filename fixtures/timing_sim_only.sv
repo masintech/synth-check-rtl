@@ -12,6 +12,13 @@ module timing_sim_only_fixture (
         else        done <= 1'b1;
     end
 
+    realtime rt;                  // behavioral: real/time (realtime variant)
+    logic dly_out;
+    assign dly_out = #2 clk;      // behavioral: #delay on assign (one Finding, not two)
+
+    // response time budget note — must NOT be flagged: "time" inside a comment.
+    logic resp_time;              // must NOT be flagged: "time" inside an identifier
+
     initial begin
         #10;                          // behavioral: #delay
         $display("sim only");         // behavioral: $display

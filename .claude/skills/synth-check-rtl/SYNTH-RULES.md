@@ -107,7 +107,12 @@ simulation/synthesis mismatches.
 - Never mix combinational logic inside a sequential block (except simple enable
   flops, which are standard cells).
 
-Bad — adder and MUX inside a sequential block:
+Bad (style) — adder and MUX inside a sequential block. Note this is not a
+correctness bug: `count <= count + 1` synthesizes fine (the adder infers
+directly on the flop's D-input) — a plain up/down counter written this way is
+a normal, working design. Flag it as `note` (optional refactor), not `warning`;
+the concern is readability and keeping the register boundary explicit as the
+combinational logic grows, not broken hardware:
 ```verilog
 always @(posedge clk or negedge reset) begin
     if (!reset) count <= 0;
@@ -117,7 +122,7 @@ always @(posedge clk or negedge reset) begin
     end
 end
 ```
-Correct — sequential registers; combinational computes next_count + enable:
+Preferred — sequential registers; combinational computes next_count + enable:
 ```verilog
 always @(posedge clk or negedge reset) begin
     if (!reset)         count <= 0;

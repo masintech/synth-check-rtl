@@ -36,7 +36,10 @@ Scan the given path. For every `.v`/`.sv`/`.vhd` file, skip testbench
 two passes over the construct reference, reached by the context pointer below:
 
 - **Pattern pass** — for each construct whose row carries a `pattern:` comment,
-  test every remaining line against that pattern. Every match is one **Finding**.
+  test every remaining line against that pattern. Strip `//` line comments and
+  the contents of `"..."` string literals from a line before testing it — words
+  inside comments or strings (e.g. `// response time`) must not trigger a
+  Finding. Every match is one **Finding**.
 - **Reasoning pass** — for constructs whose row carries a `semantic:` comment
   (CDC, logic on reset/clock, multi-edge sensitivity, inferred latch, mixed
   logic, multi-driver, blocking-in-clocked, generate misuse, port-width), reason
