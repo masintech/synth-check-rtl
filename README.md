@@ -50,6 +50,47 @@ auto-trigger on RTL edits).
 Clone into your project (or copy the `.claude/`, `.cursor/`, and `.github/`
 trees) and invoke from your editor's agent.
 
+## Example prompts
+
+**Detect** — scan a file or directory:
+
+```
+# Claude Code / Copilot
+> /synth-check-rtl rtl/uart_tx.sv
+
+5 findings: 3 errors, 2 warnings, 0 notes
+
+file:line          | construct                | severity | category
+uart_tx.sv:42      | #delay                   | error    | timing & sim-only
+uart_tx.sv:58      | inferred latch (if/else) | warning  | synthesis-correctness
+...
+```
+
+```
+# Cursor
+> @synth-check-rtl rtl/uart_tx.sv
+```
+
+With no path given and an `rtl/` directory present, `/synth-check-rtl` scans
+it by default.
+
+**Explain** a specific Finding, once you have the table above:
+
+```
+> explain finding 2
+> why is the inferred latch on line 58 a problem?
+```
+
+**Fix** one Finding at a time — nothing is edited until you confirm:
+
+```
+> fix finding 1
+> rewrite the #delay on line 42 to be synthesizable
+```
+
+The skill never bulk-fixes: each fix is scoped to the one Finding you point
+at, shown for review before any file is touched.
+
 ## Skill structure
 
 ```
@@ -77,32 +118,6 @@ allowlisted construct downgrades to `note`. The shipped seed is empty (the
 generic IEEE 1800 synthesizable subset governs). Edit the file — not the skill —
 to tune per project.
 
-## Tests
-
-The fixtures + manifests under `fixtures/` are the pre-agreed acceptance seam:
-each fixture is an `.sv` file with an expected-Findings manifest, and the tests
-assert the detector reproduces them.
-
-```bash
-python3 -m pytest tests/ -q
-```
-
-- `tests/test_detect.py` — Detect reproduces each fixture's manifest; skip of
-  testbench; `rtl/` default; allowlist wiring (auto-loaded seed by default);
-  single-source-of-truth invariants.
-- `tests/test_fix.py` — on-demand explain/fix lookups against `CONSTRUCTS.md`;
-  one-item-at-a-time; distinct inferred-latch variants.
-- `tests/test_semantic.py` — semantic constructs are tagged, excluded from
-  pattern detection, and routed to reasoning; the valid async reset is not
-  pattern-flagged; every semantic construct has a fixture case. Asserts what can
-  be asserted deterministically about a probabilistic system — no tautological
-  test.
-- `tests/test_portability.py` — the wrappers are thin pointers (no duplicated
-  logic); the Cursor wrapper is manual-only.
-- `tests/test_standards.py` — the skill conforms to `writing-great-skills`
-  (progressive disclosure, single source of truth, checkable completion criteria,
-  no negation as steering, leading words, co-location).
-
 ## Honest limitations
 
 - **Model-dependent.** Semantic detection (CDC, logic on reset/clock, multi-edge
@@ -110,15 +125,25 @@ python3 -m pytest tests/ -q
   generate misuse, port-width) is done by reasoning, not pattern. A weaker model
   or an ambiguous case can miss or misjudge. There is no deterministic proof of
   correctness — that would be tautological — so verification is by fixture
-  comparison, not a unit test.
+  comparison against known cases, not a unit test (see [Development](#development)).
 - **Pattern detection is line-based.** It strips `//` comments and string
   contents before matching, but does not build a full AST. Edge cases (block
   comments `/* */`, unusual escapes) may slip through.
 - **Generic subset by default.** Vendor-specific accepted constructs belong in
   the allowlist, not in `CONSTRUCTS.md`.
 
-## Spec & tickets
+## Development
 
-The spec and the ticket breakdown live under `.scratch/synth-check-rtl/`
-(`spec.md` + `issues/01`–`09`), tracked as local-markdown issues per
-`docs/agents/issue-tracker.md`.
+`main` ships only what you need to install and run the skill. The pytest
+suite (40 tests), the `fixtures/` acceptance corpus, the original spec and
+ticket breakdown, and the Claude Code project instructions used to build this
+repo live on the [`dev`](../../tree/dev) branch.
+
+```bash
+git checkout dev
+python3 -m pytest tests/ -q
+```
+
+## License
+
+[MIT](LICENSE)
