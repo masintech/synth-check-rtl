@@ -40,12 +40,19 @@ your tool:
 | Tool | Wrapper | Invoke |
 |------|---------|--------|
 | **Claude Code** | `.claude/skills/synth-check-rtl/` (user-invoked skill) | `/synth-check-rtl <file\|dir>` |
-| **Cursor** | `.cursor/rules/synth-check-rtl.mdc` (manual rule, `alwaysApply: false`) | `@synth-check-rtl <file\|dir>` |
+| **Cursor** | `.cursor/skills/synth-check-rtl/` (Agent Skill, `disable-model-invocation: true`) | `/synth-check-rtl <file\|dir>` |
 | **GitHub Copilot** | `.github/prompts/synth-check-rtl.prompt.md` (reusable prompt) | `/synth-check-rtl <file\|dir>` |
 
 All three point at the shared body — no logic is duplicated, so behavior never
 drifts between tools. The wrappers are manual in every tool (no ambient
 auto-trigger on RTL edits).
+
+Cursor 2.4+ uses the same open `SKILL.md` standard as Claude Code, not the
+older Rules (`.mdc`) format. Cursor also auto-discovers `.claude/skills/` as a
+legacy-compatibility path, so if you've already installed the Claude Code
+skill in a project, Cursor picks it up with no separate install step; the
+`.cursor/skills/` wrapper here is for a clean, native-path install when you
+only use Cursor.
 
 Clone into your project (or copy the `.claude/`, `.cursor/`, and `.github/`
 trees) and invoke from your editor's agent.
@@ -55,7 +62,7 @@ trees) and invoke from your editor's agent.
 **Detect** — scan a file or directory:
 
 ```
-# Claude Code / Copilot
+# Claude Code / Cursor / Copilot
 > /synth-check-rtl rtl/uart_tx.sv
 
 5 findings: 3 errors, 2 warnings, 0 notes
@@ -64,11 +71,6 @@ file:line          | construct                | severity | category
 uart_tx.sv:42      | #delay                   | error    | timing & sim-only
 uart_tx.sv:58      | inferred latch (if/else) | warning  | synthesis-correctness
 ...
-```
-
-```
-# Cursor
-> @synth-check-rtl rtl/uart_tx.sv
 ```
 
 With no path given and an `rtl/` directory present, `/synth-check-rtl` scans
